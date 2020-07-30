@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Simple route map{% endblock %}
+{% block body %}
+{{ block.super }}
+    <script src="{% static "js/bloodhound.min.js" %}"></script>
+
+<div class="container-fluid">
+  <div class="row">
+  <nav id="sidebarMenu" class="col-md-3 col-lg-2 d-md-block bg-light sidebar collapse">
+   <!-- <div class="col-md-2">-->
+      <div id="directions" class="directions">
+          <form id="submitForm">
+              <div class="radio">
+                <label>
+                  <input type="radio" name="typeRoute" id="routeTypeStandard" value="0" checked>
+                  Standard Route
+                </label>
+              </div>
+              {% comment %} <div class="radio">
+                <label>
+                  <input type="radio" name="typeRoute" id="routeTypeBarrierFree" value="1">
+                  Barrier Free Route
+                </label>
+              </div> {% endcomment %}
+              
+            <button id="enterRoute" type="submit" class="btn btn-secondary my-2 my-sm-0">Submit</button>
+            <br>
+          </form>
+      </div>
+    <!--</div>-->
+  </nav>
+    <div class="col-sm-10">
+      <div id="map" class="map" style="  height: 550px; width: 100%;"></div>
+    </div>
+  </div>
+</div>
+
+<script>  {% include 'routing.js' %} </script>
+<script>
+  
+  $( "#submitForm" ).submit(function( event ) {
+      {#  alert( "Handler for .submit() called."  );#}
+          //var startNum = $('#route-from').val();
+          //var endNum = $('#route-to').val();
+          //var rType = $( "input:radio[name=typeRoute]:checked" ).val();
+          addRoute();
+        event.preventDefault();
+      });
+
+</script>
+{% endblock body %}
