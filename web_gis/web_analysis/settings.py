@@ -94,14 +94,14 @@ WSGI_APPLICATION = 'web_analysis.wsgi.application'
 
 DATABASES = {
     'default': {
-        # 'ENGINE': 'django.db.backends.sqlite3',
-        # 'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
-        'ENGINE': 'django.db.backends.postgresql_psycopg2',
-        'NAME': 'mastering_spatial_analysis_python', # DB name
-        'USER': 'postgres', # DB user name
-        'PASSWORD': '001363', # DB user password
-        'HOST': 'localhost',
-        'PORT': '5432',
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+        # 'ENGINE': 'django.db.backends.postgresql_psycopg2',
+        # 'NAME': 'mastering_spatial_analysis_python', # DB name
+        # 'USER': 'postgres', # DB user name
+        # 'PASSWORD': '001363', # DB user password
+        # 'HOST': 'localhost',
+        # 'PORT': '5432',
     }
 }
 
