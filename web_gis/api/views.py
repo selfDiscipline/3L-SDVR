@@ -22,19 +22,19 @@ import random
 
 # Create your views here.
 
-def initVariables():
+def initVariables(n_customer, nv, Cat):
     # "rnd" is an object that generate random numbers
     rnd = np.random
     #"seed(0)" is a method that reset (every time), the same random set of numbers
     rnd.seed(0)
     # Number of collection points
-    n_customer = 5
+    n_customer = n_customer
     # The set of nodes without the depot.
     N = [i for i in range(1,n_customer+1)]
     # The set of nodes + the depot.
     V = [0]+ N
     # The Number of cargoes
-    Cat = 9
+    Cat = Cat
     # Generating items for each collection point
     IT = []
     for i in N:
@@ -44,14 +44,14 @@ def initVariables():
         IT.append(cargo_set_)
     IT_num = [(i,j) for i in N for j in range(1, Cat + 1)]
     # Number of Vehicles
-    nv = 3
+    nv = nv
     # Max volume and Max weight that each vehicle can carry
-    Container_vehicle = [('vehicle_%d'%kk, rnd.randint(30, 50), rnd.randint(30, 50), rnd.randint(30, 50), rnd.randint(100, 500)) for kk in range(0,nv) ]
+    Container_vehicle = [('vehicle_%d'%kk, rnd.randint(30, 50), rnd.randint(30, 50), rnd.randint(30, 50), rnd.randint(400, 600)) for kk in range(0,nv) ]
 
     # Defining coordinates of collection points
     Locations = pd.DataFrame()
-    xc = [35.730250, 35.716169, 35.716749, 35.736719, 35.766557, 35.767301]
-    yc = [51.334336, 51.366407, 51.407847, 51.416115, 51.375811, 51.428972]
+    xc = [35.730250, 35.716169, 35.716749, 35.736719, 35.766557, 35.767301, 35.696197]
+    yc = [51.334336, 51.366407, 51.407847, 51.416115, 51.375811, 51.428972, 51.397952]
     Locations['Latitude'] = xc
     Locations['Longitude'] = yc
     locationtuples = [tuple(x) for x in Locations.to_numpy()]
@@ -63,21 +63,22 @@ def initVariables():
     # using neshan api (Iranian map services provider) for calculating distances between each pair of points
     nmaps = neshan.Client(key='service.PNVDAoZ5IqhevfM0KSCfVlwyXTbjXrbNf7rQvqVe')
     distance_matrix_result = nmaps.distance_matrix(locationtuples,locationtuples)
-    dist= {(i, j): distance_matrix_result["rows"][i]["elements"][j]["duration"]["value"] for i, j in A}
+    dist= {(i, j): distance_matrix_result["rows"][i]["elements"][j]["distance"]["value"] for i, j in A}
     # Generating historical data wich show how many times each route has been chosen
-    historical_routes = [rnd.randint(1, 100)/100 for i in range(0, len(A))]
-    return (n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes)
+    historical_routes ={(i, j): rnd.randint(1, 100)/100 for i , j in A }
+    historical_routes_tuples = [historical_routes[i,j] for i, j in historical_routes]
+    return (n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes, historical_routes_tuples)
 
 
 ################ Vehicle Route Planning Module#####################
 
-def findRoutPlans(alpha, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes):
+def findRoutPlans(alpha, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes, historical_routes_tuples):
+    
     # Drichlet distribution of routes
     multinomial_ed=[]
     for alpha_inside in alpha:
         drichlet_mean = dirichlet.mean(alpha_inside)
         multinomial_ed.append(multinomial.rvs(300, drichlet_mean, size=RP*2))
-
     # Finding Edges
     init_final_path = []
     final_path =[]
@@ -111,13 +112,13 @@ def findRoutPlans(alpha, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicl
                 for lkj in semi_final_path[rpiterator][starting_point:]:
                     if (jkl[1] == lkj[0] and jkl[0] == lkj[1]):
                         numfailed.append(rpiterator)
-                        
         clear_paths = [i for n, i in enumerate(semi_final_path) if n not in numfailed]
         init_final_path.append(clear_paths)
 
     # Choosing different paths for every vehicle between existing rouyte plans
     d = 0
     final_path =[]
+
     for i in range(0,len(init_final_path)):
         a = init_final_path[i][d]
         final_path.append(a)
@@ -131,7 +132,7 @@ def findRoutPlans(alpha, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicl
 
 #################### Splitting Module #########################
 
-def splitCargoes(alpha_s, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes):
+def splitCargoes(alpha_s, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes, historical_routes_tuples):
     # Drichlet distribution of plans
     multinomial_ed_s=[]
     for alpha_s_inside in alpha_s:
@@ -144,30 +145,33 @@ def splitCargoes(alpha_s, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehic
     for cargoewclassiterator in range(0, len(multinomial_ed_s)):
         sorted_cargoes=[]
         for maxfinder in range(max(multinomial_ed_s[cargoewclassiterator][0]), -1, -1):
-            if maxfinder>0:
+            if maxfinder>-1:
                 finded_cargoes = np.where(multinomial_ed_s[cargoewclassiterator][0] == maxfinder)
                 sorted_cargoes.append(finded_cargoes[0])
 
         first_set = []
         for hh in sorted_cargoes:
             for ff in hh:
-                first_set.append(IT[cargoewclassiterator][ff])
+                try:
+                    first_set.append(IT[cargoewclassiterator][ff])
+                except:
+                    pass
         final_set.append([first_set])
 
     # Cargoes for vehicles
     set_for_vehicles=[]
-
+    
     for vehicle_num in range(0,nv):
         init_set=[]
         for custom_num in range(0,n_customer):
-            init_set.append(final_set[custom_num][0][vehicle_num*round(Cat/nv):vehicle_num*round(Cat/nv)+round(Cat/nv)])
+            init_set.append(final_set[custom_num][0][vehicle_num*round(len(final_set[custom_num][0])/nv):vehicle_num*round(len(final_set[custom_num][0])/nv)+round(len(final_set[custom_num][0])/nv)])
         set_for_vehicles.append(init_set)
 
     return set_for_vehicles, final_set
 
 ####################### Optimal 3D Loading Module ###################
 
-def loading(Container_vehicle, final_set, n_customer, N, V, Cat, IT, IT_num, nv, locationtuples, RP, A, nmaps, dist, historical_routes):
+def loading(Container_vehicle, final_set, n_customer, N, V, Cat, IT, IT_num, nv, locationtuples, RP, A, nmaps, dist, historical_routes, historical_routes_tuples):
     packer = Packer()
     # The maximum volum and weight that a container can carry (length, width, height, weight)
     # Add bins
@@ -192,7 +196,7 @@ def loading(Container_vehicle, final_set, n_customer, N, V, Cat, IT, IT_num, nv,
 
 ############### Function to Calculate Fitness Function 1 ###################
 
-def fitnessFunction_1(pop, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes):
+def fitnessFunction_1(pop, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes, historical_routes_tuples):
     F1=[]
     for vehicles in range(0, len(pop)):
         route_cost = 0
@@ -205,7 +209,7 @@ def fitnessFunction_1(pop, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehi
 
 ######################### Function to calculate Fitness Function 2 ####################
 
-def fitnessFunction_2(pc_items, pc_bins, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes):
+def fitnessFunction_2(pc_items, pc_bins, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes, historical_routes_tuples):
 
     # Calculate each container capacity
     containers_weight = [wgh[4] for wgh in Container_vehicle]
@@ -367,16 +371,16 @@ def mutation(pop1, pop2):
     return pop1, pop2
 
 ###################### Function to init the first population and update the distribution matrix #####################
-def InitializePopulation(pop_size, max_gen, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes):
-
+def InitializePopulation(pop_size, max_gen, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes, historical_routes_tuples):
+    logger.debug("now running function DTSA")
     route_prob = []
     for j in range(0, len(Container_vehicle)):
-        route_prob.append(historical_routes)
+        route_prob.append(historical_routes_tuples)
     alpha = route_prob  ### alpha is an array of our historical data for each edge
 
     split_prob=[]
     for i in range (0, n_customer):
-        split_prob.append([1 for i in range(0, len(IT[0]))])
+        split_prob.append([1 for j in range(0, Cat)])
     alpha_s = split_prob     ### alpha_s is an uniform array for splitting plan
 
     pop_size = pop_size
@@ -385,24 +389,26 @@ def InitializePopulation(pop_size, max_gen, n_customer, N, V, Cat, IT, IT_num, n
     gen_no = 0
     pltF1 = []
     pltF2 = []
+    function1 = []
+    function2 = []
 
     while(gen_no<max_gen):
 
         # Calculate fitness functions for generated population
         for ind in range(0,pop_size):
-            final_path = findRoutPlans(alpha, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes)
-            set_per_vehic, total_sets = splitCargoes(alpha_s, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes)
+            final_path = findRoutPlans(alpha, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes, historical_routes_tuples)
+            set_per_vehic, total_sets = splitCargoes(alpha_s, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes, historical_routes_tuples)
             pc_bins = []
             pc_items = []
             counter_sets = 0
             for vehicle_count in range(0,len(Container_vehicle)):
-                pc = loading(Container_vehicle[vehicle_count], set_per_vehic[counter_sets], n_customer, N, V, Cat, IT, IT_num, nv, locationtuples, RP, A, nmaps, dist, historical_routes)
+                pc = loading(Container_vehicle[vehicle_count], set_per_vehic[counter_sets], n_customer, N, V, Cat, IT, IT_num, nv, locationtuples, RP, A, nmaps, dist, historical_routes, historical_routes_tuples)
                 pc_bins.append(pc.bins)
                 pc_items.append(pc.items)
                 counter_sets = counter_sets + 1
 
-            fitness_1 = fitnessFunction_1(final_path, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes)
-            fitness_2 = fitnessFunction_2(pc_items, pc_bins, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes)
+            fitness_1 = fitnessFunction_1(final_path, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes, historical_routes_tuples)
+            fitness_2 = fitnessFunction_2(pc_items, pc_bins, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes, historical_routes_tuples)
 
             pop[ind] = {
                         'route': final_path,
@@ -425,20 +431,20 @@ def InitializePopulation(pop_size, max_gen, n_customer, N, V, Cat, IT, IT_num, n
         for route_min in range(0, len(pop[best_route_plan]['route'])):
             for edge in pop[best_route_plan]['route'][route_min]:
                 index = index_of(edge, A)
-                alpha[route_min][index] = alpha[route_min][index] + 0.05
-
+                alpha[route_min][index] = alpha[route_min][index] + 1
         # Updating Splitting distribution matrix
         maxcoefficient = len(pop[best_split_plan]['set'])
         for plans in pop[best_split_plan]['set']:
             maxcoefficient = maxcoefficient -1
             for node_min in plans:
-                ak = 0
-                for clus_1 in node_min :
-                    ak = ak + 1
-                    alpha_s[list(clus_1.keys())[0][0] - 1][list(clus_1.keys())[0][1] - 1] = alpha_s[list(clus_1.keys())[0][0] - 1][list(clus_1.keys())[0][1]-1] + (10*maxcoefficient)
+                if len(node_min) > Cat-2:
+                    ak = 0
+                    for clus_1 in node_min :
+                        ak = ak + 1
+                        alpha_s[list(clus_1.keys())[0][0] - 1][list(clus_1.keys())[0][1] - 1] = alpha_s[list(clus_1.keys())[0][0] - 1][list(clus_1.keys())[0][1]-1] + (1*maxcoefficient)
 
-        function1 = [i for i in objective1_values]
-        function2 = [j for j in objective2_values]
+        function1 = function1 + [i for i in objective1_values]
+        function2 = function2 + [j for j in objective2_values]
 
         pltF1.append(sum(function1)/len(function1))
         pltF2.append(sum(function2)/len(function2))
@@ -475,8 +481,8 @@ def InitializePopulation(pop_size, max_gen, n_customer, N, V, Cat, IT, IT_num, n
     return pop
 
 ############### Function to do NSGA_II to find the best plan #################
-def NSGA_II_main(pop, max_gen, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes):
-    
+def NSGA_II_main(pop, max_gen, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes, historical_routes_tuples):
+        logger.debug("now running function NSGA_II")
         max_gen = max_gen
         gen_no = 0
         pltF1 = []
@@ -489,28 +495,28 @@ def NSGA_II_main(pop, max_gen, n_customer, N, V, Cat, IT, IT_num, nv, Container_
 
         route_prob = []
         for j in range(0, len(Container_vehicle)):
-                route_prob.append([1 for i in range(0, len(historical_routes))])
+                route_prob.append([1 for i in range(0, len(historical_routes_tuples))])
         alpha = route_prob  ### alpha is an array of our historical data for each edge
 
         split_prob=[]
         for i in range (0, n_customer):
-                split_prob.append([1 for i in range(0, len(IT[0]))])
+                split_prob.append([1 for i in range(0, Cat)])
         alpha_s = split_prob     ### alpha_s is an uniform array for splitting plan
 
         for ind in range(int(pop_size/2), pop_size):
-                final_path = findRoutPlans(alpha, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes)
-                set_per_vehic, total_sets = splitCargoes(alpha_s, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes)
+                final_path = findRoutPlans(alpha, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes, historical_routes_tuples)
+                set_per_vehic, total_sets = splitCargoes(alpha_s, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes, historical_routes_tuples)
                 pc_bins = []
                 pc_items = []
                 counter_sets = 0
                 for vehicle_count in range(0,len(Container_vehicle)):
-                        pc = loading(Container_vehicle[vehicle_count], set_per_vehic[counter_sets], n_customer, N, V, Cat, IT, IT_num, nv, locationtuples, RP, A, nmaps, dist, historical_routes)
+                        pc = loading(Container_vehicle[vehicle_count], set_per_vehic[counter_sets], n_customer, N, V, Cat, IT, IT_num, nv, locationtuples, RP, A, nmaps, dist, historical_routes, historical_routes_tuples)
                         pc_bins.append(pc.bins)
                         pc_items.append(pc.items)
                         counter_sets = counter_sets + 1
 
-                fitness_1 = fitnessFunction_1(final_path, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes)
-                fitness_2 = fitnessFunction_2(pc_items, pc_bins, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes)
+                fitness_1 = fitnessFunction_1(final_path, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes, historical_routes_tuples)
+                fitness_2 = fitnessFunction_2(pc_items, pc_bins, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes, historical_routes_tuples)
 
                 pop[ind] = {
                         'route': final_path,
@@ -556,8 +562,8 @@ def NSGA_II_main(pop, max_gen, n_customer, N, V, Cat, IT, IT_num, nv, Container_
                         
                         # Calculate fitness functions for newly generated offsprings
                         for vehicle_count in range(0,len(Container_vehicle)):
-                                pc_1 = loading(Container_vehicle[vehicle_count], pop2[ll]['set'][counter_sets], n_customer, N, V, Cat, IT, IT_num, nv, locationtuples, RP, A, nmaps, dist, historical_routes)
-                                pc_2 = loading(Container_vehicle[vehicle_count], pop2[ll+1]['set'][counter_sets], n_customer, N, V, Cat, IT, IT_num, nv, locationtuples, RP, A, nmaps, dist, historical_routes)
+                                pc_1 = loading(Container_vehicle[vehicle_count], pop2[ll]['set'][counter_sets], n_customer, N, V, Cat, IT, IT_num, nv, locationtuples, RP, A, nmaps, dist, historical_routes, historical_routes_tuples)
+                                pc_2 = loading(Container_vehicle[vehicle_count], pop2[ll+1]['set'][counter_sets], n_customer, N, V, Cat, IT, IT_num, nv, locationtuples, RP, A, nmaps, dist, historical_routes, historical_routes_tuples)
                                 pc1_bins.append(pc_1.bins)
                                 pc1_items.append(pc_1.items)
                                 pc2_bins.append(pc_2.bins)
@@ -569,10 +575,10 @@ def NSGA_II_main(pop, max_gen, n_customer, N, V, Cat, IT, IT_num, nv, Container_
                         pop2[ll+1]['pack_bins'] = pc2_bins
                         pop2[ll+1]['pack_items'] = pc2_items
 
-                        fitness_1_off_1 = fitnessFunction_1(pop2[ll]['route'], n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes)
-                        fitness_2_off_1 = fitnessFunction_2(pop2[ll]['pack_items'], pop2[ll]['pack_bins'], n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes)
-                        fitness_1_off_2 = fitnessFunction_1(pop2[ll+1]['route'], n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes)
-                        fitness_2_off_2 = fitnessFunction_2(pop2[ll+1]['pack_items'], pop2[ll+1]['pack_bins'], n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes)
+                        fitness_1_off_1 = fitnessFunction_1(pop2[ll]['route'], n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes, historical_routes_tuples)
+                        fitness_2_off_1 = fitnessFunction_2(pop2[ll]['pack_items'], pop2[ll]['pack_bins'], n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes, historical_routes_tuples)
+                        fitness_1_off_2 = fitnessFunction_1(pop2[ll+1]['route'], n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes, historical_routes_tuples)
+                        fitness_2_off_2 = fitnessFunction_2(pop2[ll+1]['pack_items'], pop2[ll+1]['pack_bins'], n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes, historical_routes_tuples)
 
                         pop2[ll]['F1'] = fitness_1_off_1
                         pop2[ll]['F2'] = fitness_2_off_1
@@ -611,11 +617,7 @@ def NSGA_II_main(pop, max_gen, n_customer, N, V, Cat, IT, IT_num, nv, Container_
                 # Store fitness values
                 function1 = function1 + [i * 1 for i in objective1_values]
                 function2 = function2 + [j * 1 for j in objective2_values]
-                # function1 = [objective1_values[i] for i in non_dominated_sorted_solution[0]]
-                # function2 = [objective2_values[j] for j in non_dominated_sorted_solution[0]]
 
-                # pltF1.append(sum(function1)/len(function1))
-                # pltF2.append(sum(function2)/len(function2))
                 pltF1.append(min(function1))
                 pltF2.append(min(function2))
 
@@ -660,6 +662,7 @@ def NSGA_II_main(pop, max_gen, n_customer, N, V, Cat, IT, IT_num, nv, Container_
 def sequencefinder(final_pop, locationtuples, n_customer):
     route_sequence =[0]
     k=0
+    
     for al in range(0,20):
         for i,j in final_pop[0]['route'][0]:
             if i == k:
@@ -673,19 +676,104 @@ def sequencefinder(final_pop, locationtuples, n_customer):
 
 
 @api_view(['GET', 'POST'])
-def rout_finding(request):
+def rout_finding(request, collection_points, vehicle_number, cargoe_number):
+    logger.debug("now running function rout_finding")
     if request.method == 'GET' or request.method == 'POST':
+        collection_points = int(collection_points)
+        vehicle_number = int(vehicle_number)
+        cargoe_number = int(cargoe_number)
 
-        n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes = initVariables()
+        n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes, historical_routes_tuples = initVariables(collection_points, vehicle_number, cargoe_number)
         # Running the DTSA Module for producing routing and splitting plans
-        initpop = InitializePopulation(20, 10, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes)
+        initpop = InitializePopulation(10, 5, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes, historical_routes_tuples)
         # Running The NSGA_II for finding the optimum solutions for SD-VRP problem
-        final_pop = NSGA_II_main(initpop, 10, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes)
+        final_pop = NSGA_II_main(initpop, 5, n_customer, N, V, Cat, IT, IT_num, nv, Container_vehicle, locationtuples, RP, A, nmaps, dist, historical_routes, historical_routes_tuples)
+        # Saving the route for showing on the map
+        final_routing_plan=[]
         sequence_locations = sequencefinder(final_pop, locationtuples, n_customer)
-        directions_result = nmaps.directions(sequence_locations[0],sequence_locations[-1],sequence_locations[1:-1])   
-        overviewPath = directions_result[0]["overview_polyline"]["points"]
+        directions_result = nmaps.directions(sequence_locations[0], sequence_locations[-1], sequence_locations[1:-1])
+        final_routing_plan.append(directions_result[0]["overview_polyline"]["points"])
+        
+        # Calculate remained Items that has not been collected yet
+        whole_remain_items=[]
+        remained_items = {}
+        remained_items_txt_vehicle = {}
+        for b in final_pop[0]['pack_bins']:
+            whole_cargoes = {}
+            unfitted_items_txt={}
+            fitted_items_txt={}
+            for unfit in b[0].unfitted_items:
+                remained_items[unfit.name] = unfit.get_dimension()
+                unfitted_items_txt[str(unfit.name)] = unfit.string()
+            for fit in b[0].items:
+                fitted_items_txt[str(fit.name)] = fit.string()
+            whole_cargoes['Fitted_Items'] = fitted_items_txt
+            whole_cargoes['Unfitted_Items'] = unfitted_items_txt
+            remained_items_txt_vehicle[b[0].string()] = whole_cargoes
+
+        remained_collection_points =[0]
+        for i,j in remained_items:
+            if i not in remained_collection_points:
+                remained_collection_points.append(i)
+        remained_collection_points = sorted(remained_collection_points)
+
+        whole_remain_items.append(remained_items_txt_vehicle)
+
+        # Looping through the whole algorithm again untill all cargies are allocated
+        while (len(remained_collection_points)>2):
+            # remove unremained collection point from historical data
+            new_historical_routes_tuples=[]
+            for i,j in historical_routes:
+                if i in remained_collection_points and j in remained_collection_points:
+                    new_historical_routes_tuples.append(historical_routes[i,j])
+
+            # remove unremained collection point from edges
+            new_A = [(i,j) for i in remained_collection_points for j in remained_collection_points if i!=j]
+
+            # remove allocated cargoes
+            IT_new = []
+            for i in N:
+                cargo_set_2=[]
+                for j in range (1,Cat + 1):
+                    if (i, j) in remained_items:
+                        cargo_set_2.append(IT[i-1][j-1])
+                IT_new.append(cargo_set_2)
+
+            initpop_2 = InitializePopulation(10, 5, len(remained_collection_points)-1, N, V, Cat, IT_new, IT_num, nv, Container_vehicle, locationtuples,RP, new_A, nmaps, dist, historical_routes, new_historical_routes_tuples)
+            final_pop_2 = NSGA_II_main(initpop_2, 5, len(remained_collection_points)-1, N, V, Cat, IT_new, IT_num, nv, Container_vehicle, locationtuples, RP, new_A, nmaps, dist, historical_routes, new_historical_routes_tuples)
+
+            sequence_locations_2 = sequencefinder(final_pop_2, locationtuples, len(remained_collection_points)-1)
+            directions_result_2 = nmaps.directions(sequence_locations_2[0], sequence_locations_2[-1], sequence_locations_2[1:-1])
+
+            final_routing_plan.append(directions_result_2[0]["overview_polyline"]["points"])
+
+            # Calculate remained Items that has not been collected yet
+            remained_items = {}
+            remained_items_txt_vehicle = {}
+            for b in final_pop_2[0]['pack_bins']:
+                whole_cargoes = {}
+                unfitted_items_txt={}
+                fitted_items_txt={}
+                for unfit in b[0].unfitted_items:
+                    remained_items[unfit.name] = unfit.get_dimension()
+                    unfitted_items_txt[str(unfit.name)] = unfit.string()
+                for fit in b[0].items:
+                    fitted_items_txt[str(fit.name)] = fit.string()
+                whole_cargoes['Fitted_Items'] = fitted_items_txt
+                whole_cargoes['Unfitted_Items'] = unfitted_items_txt
+                remained_items_txt_vehicle[b[0].string()] = whole_cargoes
+
+            remained_collection_points =[0]
+            for i,j in remained_items:
+                if i not in remained_collection_points:
+                    remained_collection_points.append(i)
+            remained_collection_points = sorted(remained_collection_points)
+            whole_remain_items.append(remained_items_txt_vehicle)
+
+        # overviewPath = directions_result[0]["overview_polyline"]["points"]        
+        finalresult =[final_routing_plan, locationtuples, whole_remain_items]
         try:
-            return Response(overviewPath)
+            return Response(finalresult)
         except:
             logger.error("error exporting model algorithm")
             logger.error(traceback.format_exc())
@@ -734,30 +822,3 @@ def direction_result(request, start_coord, end_coord):
     else:
         return HttpResponseNotFound('<h1>Sorry not a GET or POST request</h1>')
 
-@api_view(['GET', 'POST'])
-def room_list(request):
-    '''
-    http://localhost:8000/api/rooms
-    :param request: no parameters GET or POST
-    :return: JSON Array of room numbers
-    '''
-    # cur = connection.cursor()
-    if request.method == 'GET' or request.method == 'POST':
-
-        # room_query = """SELECT room_num FROM geodata.search_rooms_v"""
-
-        # cur.execute(room_query)
-        # room_nums = cur.fetchall()
-        room_nums = [1,2,3,4,5,6]
-        room_num_list = []
-        for x in room_nums:
-            # v = x[0]
-            v = x
-            room_num_list.append(v)
-
-        try:
-            return Response(room_num_list)
-        except:
-            logger.error("error exporting to json model: " + str(room_num_list))
-            logger.error(traceback.format_exc())
-            return Response({'error': 'either no JSON or no key params in your JSON'})
